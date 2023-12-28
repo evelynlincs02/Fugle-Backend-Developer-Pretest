@@ -11,7 +11,15 @@ app.get('/data', (req, res) => {
   .then(response => response.json())
   .then(jsonArray => {
     let id = req.query.user
-    res.send(JSON.stringify(jsonArray))
+    let resultArray = []
+    jsonArray.forEach(num => {
+      if (num%id == 0) {
+        resultArray.push(num)
+      }
+    });
+
+    // res.setHeader('Content-Type', 'application/json');
+    res.send({result: resultArray})
   })
   .catch(function (err) {
     res.status(500).send(err.message);
