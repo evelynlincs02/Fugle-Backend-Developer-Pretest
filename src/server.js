@@ -3,11 +3,20 @@ const app = express()
 const port = 3000
 
 app.get('/', (req, res) => {
-  res.send('Hello World!')
+  res.send('# API Server Implementation')
 })
 
 app.get('/data', (req, res) => {
-  res.send(JSON.stringify(req.query))
+  fetch("https://hacker-news.firebaseio.com/v0/topstories.json?print=pretty")
+  .then(response => response.json())
+  .then(jsonArray => {
+    let id = req.query.user
+    res.send(JSON.stringify(jsonArray))
+  })
+  .catch(function (err) {
+    res.status(500).send(err.message);
+    console.log("Unable to fetch -", err);
+  });
 })
 
 app.listen(port, () => {
