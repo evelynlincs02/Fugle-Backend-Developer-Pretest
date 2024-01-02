@@ -5,6 +5,7 @@ const setupServer = (server) => {
   serverWS.on('connection', ws => {
 
     let bitstampWS = initBitStampWS(ws);
+    let subscribing = ["btcusd"];
 
     console.log('serverWS: Open connection');
 
@@ -19,25 +20,43 @@ const setupServer = (server) => {
       switch (response.event) {
         case 'subscribe': {
           let currencyPair = response.data.currency_pair;
-          let msg = {
-            "event": "bts:subscribe",
-            "data": {
-              "channel": `live_trades_${currencyPair}`
-            }
-          };
-          bitstampWS.send(JSON.stringify(msg));
+          const index = subscribing.indexOf(currencyPair);
+          if (subscribing.length < 10 && index == -1) {
+            subscribing.push(currencyPair);
+            let msg = {
+              "event": "bts:subscribe",
+              "data": {
+                "channel": `live_trades_${currencyPair}`
+              }
+            };
+            bitstampWS.send(JSON.stringify(msg));
+          }
           break;
         }
         case 'unsubscribe': {
           let currencyPair = response.data.currency_pair;
+          const index = subscribing.indexOf(currencyPair);
+          if (index > -1) { // only splice array when item is found
+            subscribing.splice(index, 1);
+            let msg = {
+              "event": "bts:unsubscribe",
+              "data": {
+                "channel": `live_trades_${currencyPair}`
+              }
+            };
+            bitstampWS.send(JSON.stringify(msg));
+          }
+          break;
+        }
+        case 'subscribe_list': {
           let msg = {
-            "event": "bts:unsubscribe",
+            "event": "subscribe_list",
             "data": {
-              "channel": `live_trades_${currencyPair}`
+              currency_pair: subscribing
             }
           };
-          bitstampWS.send(JSON.stringify(msg));
-          break;
+
+          ws.send(JSON.stringify(msg));
         }
       }
     });
@@ -69,7 +88,7 @@ function initBitStampWS(serverWS) {
     switch (response.event) {
       case 'trade': {
         console.log(response.data.id)
-        serverWS.send(JSON.stringify(response.data));
+        serverWS.send(evt.data);
         break;
       }
       case 'bts:request_reconnect': {
@@ -79,6 +98,8 @@ function initBitStampWS(serverWS) {
     }
 
   };
+
+  bitstampWS.on("error", (e) => console.error(e));
 
   bitstampWS.onclose = function () {
     console.log('bitstampWS: Websocket connection closed');
