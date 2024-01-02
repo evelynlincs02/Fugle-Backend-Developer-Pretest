@@ -20,7 +20,8 @@ ws.onmessage = (evt) => {
     let subscribeMsg = {
       "event": "subscribe",
       "data": {
-        "currency_pair": ["btcgbp", "etheur", "bchbtc", "eurusd", "xlmeur", "audiousd", "usdteur", "sxpusd", "1inchusd", "eurcveur"]
+        // "currency_pair": ["btcgbp", "etheur", "bchbtc", "eurusd", "xlmeur", "audiousd", "usdteur", "sxpusd", "1inchusd", "eurcveur"]
+        "currency_pair": ["btcgbp", "etheur", "bchbtc"]
       }
     };
     ws.send(JSON.stringify(subscribeMsg));
@@ -36,10 +37,10 @@ ws.onmessage = (evt) => {
     ws.send(JSON.stringify(subscribeMsg));
   }
 
-  if (count%5 == 0) {
-    let subscribeMsg = {
-      "event": "subscribe_list",
-    };
-    ws.send(JSON.stringify(subscribeMsg));
-  }
+  // if (count%5 == 0) {
+  //   let subscribeMsg = {
+  //     "event": "subscribe_list",
+  //   };
+  //   ws.send(JSON.stringify(subscribeMsg));
+  // }
 }
