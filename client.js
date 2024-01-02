@@ -35,6 +35,7 @@ ws.onmessage = (evt) => {
       }
     };
     ws.send(JSON.stringify(subscribeMsg));
+    count = 0
   }
 
   // if (count%5 == 0) {

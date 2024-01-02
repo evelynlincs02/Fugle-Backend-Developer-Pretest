@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const redisClient = require('./redis');
 
 const setupServer = (server) => {
-  serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
+  let serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
   serverWS.on('connection', ws => {
 
     let bitstampWS = initBitStampWS(ws);
@@ -10,29 +10,45 @@ const setupServer = (server) => {
 
     console.log('serverWS: Open connection');
 
-    const job = setInterval( function () {
-      subscribing.forEach(market_symbol => {
-        fetch(`https://www.bitstamp.net/api/v2/ohlc/${market_symbol}?step=60&limit=1`)
-          .then(response => response.json())
-          .then(async ohlcResponse => {
-            // console.log(Math.floor(new Date().setSeconds(0)/1000), ohlcResponse.data.ohlc[0].timestamp)
-            const redisKey = `ohlc/${market_symbol}/${ohlcResponse.data.ohlc[0].timestamp}`
+    const job = setInterval(function () {
+      subscribing.forEach(async market_symbol => {
+        let redisKey = `ohlc/${market_symbol}/${Math.floor(new Date().setSeconds(0) / 1000)}`;
+        let rawData = await redisClient.get(redisKey);
+        if (!!rawData) {
+          let ohlcData = JSON.parse(rawData);
+          console.log("redis get: ", redisKey, ohlcData);
+          let msg = {
+            "event": "ohlc",
+            "pair": ohlcData.pair,
+            "data": ohlcData.ohlc
+          };
 
-            await redisClient.set(redisKey, JSON.stringify(ohlcResponse.data));
-            await redisClient.expire(redisKey, 15 * 60);
-            
-            let msg = {
-              "event": "ohlc",
-              "pair": ohlcResponse.data.pair,
-              "data": ohlcResponse.data.ohlc
-            };
-  
-            ws.send(JSON.stringify(msg));
-          })
-          .catch(function (err) {
-            // res.status(500).send(err.message);
-            console.log("Unable to fetch -", err);
-          });
+          ws.send(JSON.stringify(msg));
+        } else {
+          console.log("redis get: ", redisKey, " not found");
+
+          fetch(`https://www.bitstamp.net/api/v2/ohlc/${market_symbol}?step=60&limit=1`)
+            .then(response => response.json())
+            .then(async ohlcResponse => {
+              // console.log(Math.floor(new Date().setSeconds(0)/1000), ohlcResponse.data.ohlc[0].timestamp)
+              redisKey = `ohlc/${market_symbol}/${ohlcResponse.data.ohlc[0].timestamp}`
+
+              await redisClient.set(redisKey, JSON.stringify(ohlcResponse.data));
+              await redisClient.expire(redisKey, 15 * 60);
+
+              let msg = {
+                "event": "ohlc",
+                "pair": ohlcResponse.data.pair,
+                "data": ohlcResponse.data.ohlc
+              };
+
+              ws.send(JSON.stringify(msg));
+            })
+            .catch(function (err) {
+              // res.status(500).send(err.message);
+              console.log("Unable to fetch -", err);
+            });
+        }
       });
     }, 60 * 1000);
 
@@ -132,7 +148,7 @@ function initBitStampWS(serverWS) {
      */
     switch (response.event) {
       case 'trade': {
-        console.log(response.data.id)
+        // console.log(response.data.id)
         serverWS.send(evt.data);
         break;
       }
