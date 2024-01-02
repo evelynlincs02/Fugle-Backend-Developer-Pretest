@@ -1,21 +1,21 @@
 const WebSocket = require('ws');
 
-let bitstampWS;
-
 const setupServer = (server) => {
   serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
   serverWS.on('connection', ws => {
 
-    bitstampWS = initBitStampWS(ws);
+    let bitstampWS = initBitStampWS(ws);
 
     console.log('serverWS: Open connection');
 
     ws.on('close', () => {
-      console.log('serverWS: Close connected')
+      console.log('serverWS: Close connection')
+      bitstampWS.close()
     });
 
     ws.on('message', evt => {
-      let response = JSON.parse(evt.data);
+      let response = JSON.parse(evt);
+      console.log("client: ", response);
       switch (response.event) {
         case 'subscribe': {
           let currencyPair = response.data.currency_pair;
@@ -79,12 +79,9 @@ function initBitStampWS(serverWS) {
     }
 
   };
-  /**
-   * In case of unexpected close event, try to reconnect.
-   */
+
   bitstampWS.onclose = function () {
     console.log('bitstampWS: Websocket connection closed');
-    initBitStampWS();
   };
 
   return bitstampWS;
