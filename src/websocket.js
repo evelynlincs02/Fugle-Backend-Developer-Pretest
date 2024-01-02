@@ -1,4 +1,6 @@
 const WebSocket = require('ws');
+const redisClient = require('./redis');
+const schedule = require('node-schedule');
 
 const setupServer = (server) => {
   serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
@@ -8,6 +10,32 @@ const setupServer = (server) => {
     let subscribing = ["btcusd"];
 
     console.log('serverWS: Open connection');
+
+    const job = schedule.scheduleJob('5 * * * * *', function (fireDate) {
+      subscribing.forEach(market_symbol => {
+        fetch(`https://www.bitstamp.net/api/v2/ohlc/${market_symbol}?step=60&limit=1`)
+          .then(response => response.json())
+          .then(async ohlcResponse => {
+            console.log(fireDate.getTime(), ohlcResponse.data.ohlc.timestamp)
+            const redisKey = `ohlc/${market_symbol}/${ohlcResponse.data.ohlc[0].timestamp}`
+
+            await redisClient.set(redisKey, JSON.stringify(ohlcResponse.data));
+            await redisClient.expire(redisKey, 15*60);
+            
+            let msg = {
+              "event": "ohlc",
+              "pair": ohlcResponse.data.pair,
+              "data": ohlcResponse.data.ohlc
+            };
+  
+            ws.send(JSON.stringify(msg));
+          })
+          .catch(function (err) {
+            // res.status(500).send(err.message);
+            console.log("Unable to fetch -", err);
+          });
+      });
+    });
 
     ws.on('close', () => {
       console.log('serverWS: Close connection')
@@ -35,7 +63,7 @@ const setupServer = (server) => {
             }
           }
 
-          while (subscribing.length>10) { // if there are more than 10 currency_pair subscribing, unsubscribe.
+          while (subscribing.length > 10) { // if there are more than 10 currency_pair subscribing, unsubscribe.
             const deleted = subscribing.shift();
             let msg = {
               "event": "bts:unsubscribe",
