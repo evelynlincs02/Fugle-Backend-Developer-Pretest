@@ -17,34 +17,51 @@ const setupServer = (server) => {
     ws.on('message', evt => {
       let response = JSON.parse(evt);
       console.log("client: ", response);
+
       switch (response.event) {
         case 'subscribe': {
-          let currencyPair = response.data.currency_pair;
-          const index = subscribing.indexOf(currencyPair);
-          if (subscribing.length < 10 && index == -1) {
-            subscribing.push(currencyPair);
+          let currencyPairs = response.data.currency_pair;
+          for (const currencyPair of currencyPairs) {
+            const index = subscribing.indexOf(currencyPair);
+            if (index == -1) {
+              subscribing.push(currencyPair);
+              let msg = {
+                "event": "bts:subscribe",
+                "data": {
+                  "channel": `live_trades_${currencyPair}`
+                }
+              };
+              bitstampWS.send(JSON.stringify(msg));
+            }
+          }
+
+          while (subscribing.length>10) { // if there are more than 10 currency_pair subscribing, unsubscribe.
+            const deleted = subscribing.shift();
             let msg = {
-              "event": "bts:subscribe",
+              "event": "bts:unsubscribe",
               "data": {
-                "channel": `live_trades_${currencyPair}`
+                "channel": `live_trades_${deleted}`
               }
             };
             bitstampWS.send(JSON.stringify(msg));
           }
+
           break;
         }
         case 'unsubscribe': {
-          let currencyPair = response.data.currency_pair;
-          const index = subscribing.indexOf(currencyPair);
-          if (index > -1) { // only splice array when item is found
-            subscribing.splice(index, 1);
-            let msg = {
-              "event": "bts:unsubscribe",
-              "data": {
-                "channel": `live_trades_${currencyPair}`
-              }
-            };
-            bitstampWS.send(JSON.stringify(msg));
+          let currencyPairs = response.data.currency_pair;
+          for (const currencyPair of currencyPairs) {
+            const index = subscribing.indexOf(currencyPair);
+            if (index > -1) { // only splice array when item is found
+              subscribing.splice(index, 1);
+              let msg = {
+                "event": "bts:unsubscribe",
+                "data": {
+                  "channel": `live_trades_${currencyPair}`
+                }
+              };
+              bitstampWS.send(JSON.stringify(msg));
+            }
           }
           break;
         }
@@ -52,7 +69,7 @@ const setupServer = (server) => {
           let msg = {
             "event": "subscribe_list",
             "data": {
-              currency_pair: subscribing
+              "currency_pair": subscribing
             }
           };
 

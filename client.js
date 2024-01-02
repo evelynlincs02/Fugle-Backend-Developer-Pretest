@@ -20,23 +20,23 @@ ws.onmessage = (evt) => {
     let subscribeMsg = {
       "event": "subscribe",
       "data": {
-        "currency_pair": "btceur"
+        "currency_pair": ["btcgbp", "etheur", "bchbtc", "eurusd", "xlmeur", "audiousd", "usdteur", "sxpusd", "1inchusd", "eurcveur"]
       }
     };
     ws.send(JSON.stringify(subscribeMsg));
   }
 
-  if (count == 5) {
+  if (count == 100) {
     let subscribeMsg = {
       "event": "unsubscribe",
       "data": {
-        "currency_pair": "btcusd"
+        "currency_pair": ["btcusd", "btcgbp"]
       }
     };
     ws.send(JSON.stringify(subscribeMsg));
   }
 
-  if (count%7 == 0) {
+  if (count%5 == 0) {
     let subscribeMsg = {
       "event": "subscribe_list",
     };
