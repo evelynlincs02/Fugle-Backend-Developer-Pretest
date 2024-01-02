@@ -1,3 +1,9 @@
+# Setup
+
+```
+docker-compose up --build -d
+```
+
 # API Server Implementation
 
 請使⽤ Express、Koa 或 Nest 實作⼀個 API server，可以使⽤任何其他第三⽅套件。
