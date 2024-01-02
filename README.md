@@ -4,6 +4,26 @@
 docker-compose up --build -d
 ```
 
+### Websocket subscribe／unsubscribe API Example
+```json
+// subscribe
+{
+  "event": "subscribe",
+  "data": {
+    "currency_pair": ["btcgbp", "etheur", "bchbtc"]
+  }
+}
+
+// unsubscribe
+{
+  "event": "unsubscribe",
+  "data": {
+    "currency_pair": ["btcusd", "btcgbp"]
+  }
+}
+```
+
+
 # API Server Implementation
 
 請使⽤ Express、Koa 或 Nest 實作⼀個 API server，可以使⽤任何其他第三⽅套件。
