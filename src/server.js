@@ -1,7 +1,11 @@
+const http = require("http");
 const express = require('express');
 const rateLimiter = require('./middleware');
+const setupWebsocket = require("./websocket");
 const app = express();
 const port = 3000;
+
+const server = http.createServer(app);
 
 app.get('/', (req, res) => {
   res.send('# API Server Implementation');
@@ -28,6 +32,8 @@ app.get('/data', rateLimiter, (req, res) => {
     });
 })
 
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 })
+
+setupWebsocket(server)
