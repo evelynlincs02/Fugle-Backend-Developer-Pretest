@@ -1,4 +1,5 @@
 const express = require('express')
+const rateLimiter = require('./middleware')
 const app = express()
 const port = 3000
 
@@ -6,7 +7,7 @@ app.get('/', (req, res) => {
   res.send('# API Server Implementation')
 })
 
-app.get('/data', (req, res) => {
+app.get('/data', rateLimiter, (req, res) => {
   fetch("https://hacker-news.firebaseio.com/v0/topstories.json?print=pretty")
   .then(response => response.json())
   .then(jsonArray => {
