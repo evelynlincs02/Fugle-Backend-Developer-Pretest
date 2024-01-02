@@ -2,11 +2,11 @@
 const redisClient = require('./redis')
 
 const limit = {
-  ip:{
+  ip: {
     time: 60,
     count: 10
   },
-  user:{
+  user: {
     time: 60,
     count: 5
   }
@@ -17,7 +17,7 @@ const rateLimiter = async (request, response, next) => {
   const redisKeyUser = `data/${request.query.user}`
 
   const redisReqIp = await redisClient.incr(redisKeyIP)
-  if (redisReqIp === 1){
+  if (redisReqIp === 1) {
     await redisClient.expire(redisKeyIP, limit.ip.time)
   }
 

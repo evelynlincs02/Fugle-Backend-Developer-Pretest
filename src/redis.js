@@ -1,13 +1,13 @@
-const redis = require('redis')
+const redis = require('redis');
 
 const REDIS_CONFIG = {
   HOST: process.env.REDIS_HOST || "172.17.0.3",
   PORT: process.env.REDIS_PORT || "6379"
-}
+};
 
-let redisClient
+let redisClient;
 
-(async ()=> {
+(async () => {
   if (!redisClient) {
     redisClient = redis.createClient({
       socket: {
@@ -18,7 +18,7 @@ let redisClient
 
     await redisClient.connect();
   }
-})()
+})();
 
 
-module.exports = redisClient
+module.exports = redisClient;
