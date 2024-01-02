@@ -5,13 +5,13 @@ let bitstampWS;
 const setupServer = (server) => {
   serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
   serverWS.on('connection', ws => {
-    if (!bitstampWS) {
-      bitstampWS = initBitStampWS(ws);
-    }
-    console.log('Open connection');
+
+    bitstampWS = initBitStampWS(ws);
+
+    console.log('serverWS: Open connection');
 
     ws.on('close', () => {
-      console.log('Close connected')
+      console.log('serverWS: Close connected')
     });
 
     ws.on('message', evt => {
@@ -83,7 +83,7 @@ function initBitStampWS(serverWS) {
    * In case of unexpected close event, try to reconnect.
    */
   bitstampWS.onclose = function () {
-    console.log('Websocket connection closed');
+    console.log('bitstampWS: Websocket connection closed');
     initBitStampWS();
   };
 
