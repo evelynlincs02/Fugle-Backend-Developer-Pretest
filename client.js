@@ -4,6 +4,13 @@ let ws = new WebSocket('ws://localhost:3000/streaming')
 
 ws.onopen = () => {
   console.log('client: open connection')
+  let subscribeMsg = {
+    "event": "subscribe",
+    "data": {
+      "currency_pair": ["btcusd", "xlmeur", "audiousd", "usdteur"]
+    }
+  };
+  ws.send(JSON.stringify(subscribeMsg));
 }
 
 ws.onclose = () => {

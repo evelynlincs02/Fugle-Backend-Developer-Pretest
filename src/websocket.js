@@ -1,61 +1,20 @@
 const WebSocket = require('ws');
-const redisClient = require('./redis');
+const createRedisTS = require('./redis');
 
-const setupServer = (server) => {
+function setupServer(server) {
   let serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
+  let bitstampWS = initBitStampWS(serverWS);
+  const subMap = new Map();
+
   serverWS.on('connection', ws => {
 
-    let bitstampWS = initBitStampWS(ws);
-    let subscribing = ["btcusd"];
+    // let bitstampWS = initBitStampWS(ws);
+    let subscribing = new Set();
 
     console.log('serverWS: Open connection');
 
-    const job = setInterval(function () {
-      subscribing.forEach(async market_symbol => {
-        let redisKey = `ohlc/${market_symbol}/${Math.floor(new Date().setSeconds(0) / 1000)}`;
-        let rawData = await redisClient.get(redisKey);
-        if (!!rawData) {
-          let ohlcData = JSON.parse(rawData);
-          console.log("redis get: ", redisKey, ohlcData);
-          let msg = {
-            "event": "ohlc",
-            "pair": ohlcData.pair,
-            "data": ohlcData.ohlc
-          };
-
-          ws.send(JSON.stringify(msg));
-        } else {
-          console.log("redis get: ", redisKey, " not found");
-
-          fetch(`https://www.bitstamp.net/api/v2/ohlc/${market_symbol}?step=60&limit=1`)
-            .then(response => response.json())
-            .then(async ohlcResponse => {
-              // console.log(Math.floor(new Date().setSeconds(0)/1000), ohlcResponse.data.ohlc[0].timestamp)
-              redisKey = `ohlc/${market_symbol}/${ohlcResponse.data.ohlc[0].timestamp}`
-
-              await redisClient.set(redisKey, JSON.stringify(ohlcResponse.data));
-              await redisClient.expire(redisKey, 15 * 60);
-
-              let msg = {
-                "event": "ohlc",
-                "pair": ohlcResponse.data.pair,
-                "data": ohlcResponse.data.ohlc
-              };
-
-              ws.send(JSON.stringify(msg));
-            })
-            .catch(function (err) {
-              // res.status(500).send(err.message);
-              console.log("Unable to fetch -", err);
-            });
-        }
-      });
-    }, 60 * 1000);
-
     ws.on('close', () => {
       console.log('serverWS: Close connection');
-      bitstampWS.close();
-      clearInterval(job);
     });
 
     ws.on('message', evt => {
@@ -64,11 +23,20 @@ const setupServer = (server) => {
 
       switch (response.event) {
         case 'subscribe': {
-          let currencyPairs = response.data.currency_pair;
+          let currencyPairs = new Set(response.data.currency_pair);
+          while (currencyPairs.size > 10) {
+            const setIter = currencyPairs.keys();
+            currencyPairs.delete(setIter.next().value);
+          }
+          while (subscribing.size + currencyPairs.size > 10) {
+            const setIter = subscribing.keys();
+            subscribing.delete(setIter.next().value);
+          }
           for (const currencyPair of currencyPairs) {
-            const index = subscribing.indexOf(currencyPair);
-            if (index == -1) {
-              subscribing.push(currencyPair);
+            subscribing.add(currencyPair);
+            if (!subMap.has(currencyPair)) {
+              createRedisTS(currencyPair);
+              subMap.set(currencyPair, new Set([ws]));
               let msg = {
                 "event": "bts:subscribe",
                 "data": {
@@ -76,35 +44,30 @@ const setupServer = (server) => {
                 }
               };
               bitstampWS.send(JSON.stringify(msg));
+            } else {
+              subMap.get(currencyPair).add(ws);
             }
           }
-
-          while (subscribing.length > 10) { // if there are more than 10 currency_pair subscribing, unsubscribe.
-            const deleted = subscribing.shift();
-            let msg = {
-              "event": "bts:unsubscribe",
-              "data": {
-                "channel": `live_trades_${deleted}`
-              }
-            };
-            bitstampWS.send(JSON.stringify(msg));
-          }
-
           break;
         }
         case 'unsubscribe': {
           let currencyPairs = response.data.currency_pair;
           for (const currencyPair of currencyPairs) {
-            const index = subscribing.indexOf(currencyPair);
-            if (index > -1) { // only splice array when item is found
-              subscribing.splice(index, 1);
-              let msg = {
-                "event": "bts:unsubscribe",
-                "data": {
-                  "channel": `live_trades_${currencyPair}`
+            if (subscribing.delete(currencyPair)) {
+              const clients = subMap.get(currencyPair);
+              if (!!clients) {
+                clients.delete(ws);
+                if (clients.size == 0) { // No more client subscribing this currencyPair
+                  subMap.delete(currencyPair);
+                  let msg = {
+                    "event": "bts:unsubscribe",
+                    "data": {
+                      "channel": `live_trades_${currencyPair}`
+                    }
+                  };
+                  bitstampWS.send(JSON.stringify(msg));
                 }
-              };
-              bitstampWS.send(JSON.stringify(msg));
+              }
             }
           }
           break;
@@ -113,7 +76,7 @@ const setupServer = (server) => {
           let msg = {
             "event": "subscribe_list",
             "data": {
-              "currency_pair": subscribing
+              "currency_pair": Array.from(subscribing)
             }
           };
 
@@ -123,7 +86,19 @@ const setupServer = (server) => {
     });
   });
 
-  return serverWS
+  serverWS.on('trade', (evt) => {
+    const data = JSON.parse(evt);
+    console.log(data);
+    const currencyPair = data.channel.split('_')[2];
+    const wsClients = subMap.get(currencyPair);
+    if (!!wsClients) {
+      wsClients.forEach(client => {
+        client.send(evt);
+      });
+    }
+  });
+
+  return serverWS;
 }
 
 
@@ -131,13 +106,14 @@ function initBitStampWS(serverWS) {
   bitstampWS = new WebSocket("wss://ws.bitstamp.net");
 
   bitstampWS.onopen = function () {
-    let defaultSubscribeMsg = {
-      "event": "bts:subscribe",
-      "data": {
-        "channel": "live_trades_btcusd"
-      }
-    };
-    bitstampWS.send(JSON.stringify(defaultSubscribeMsg));
+    // let defaultSubscribeMsg = {
+    //   "event": "bts:subscribe",
+    //   "data": {
+    //     "channel": "live_trades_btcusd"
+    //   }
+    // };
+    // bitstampWS.send(JSON.stringify(defaultSubscribeMsg));
+    console.log('bitstampWS: Linked to bitstamp');
   };
 
   bitstampWS.onmessage = function (evt) {
@@ -149,7 +125,7 @@ function initBitStampWS(serverWS) {
     switch (response.event) {
       case 'trade': {
         // console.log(response.data.id)
-        serverWS.send(evt.data);
+        serverWS.emit('trade', evt.data);
         break;
       }
       case 'bts:request_reconnect': {
