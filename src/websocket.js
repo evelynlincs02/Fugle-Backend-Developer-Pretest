@@ -1,5 +1,5 @@
 const WebSocket = require('ws');
-const createRedisTS = require('./redis');
+const { redisClient, createRedisTS, addRedisTS, getOHLC } = require('./redis');
 
 function setupServer(server) {
   let serverWS = new WebSocket.Server({ server: server, path: "/streaming" });
@@ -13,8 +13,40 @@ function setupServer(server) {
 
     console.log('serverWS: Open connection');
 
+    const jobOHLC = setInterval(function(){
+      const zeroSecondTS = new Date().setSeconds(0, 0);
+      subscribing.forEach(async market_symbol => {
+        let redisKey = `ohlc/${market_symbol}/${Math.floor(zeroSecondTS / 1000)}`;
+        let rawData = await redisClient.get(redisKey);
+        if (!!rawData) {
+          console.log("redis get: ", redisKey);
+
+          ws.send(rawData);
+        } else {
+          console.log("redis get: ", redisKey, " not found");
+          const objOHLC = await getOHLC(market_symbol, zeroSecondTS - 60 * 1000, zeroSecondTS);
+          const ohlcData = {
+            "event": "ohlc",
+            "data": {
+              "timestamp": zeroSecondTS / 1000,
+              "pair": market_symbol,
+              "ohlc": objOHLC
+            }
+          };
+
+          const rawData = JSON.stringify(ohlcData);
+          await redisClient.set(redisKey, rawData, 'EX', 15 * 60);
+          ws.send(rawData);
+        }
+      });
+    }, 60 * 1000);
+
     ws.on('close', () => {
       console.log('serverWS: Close connection');
+      subMap.forEach((clientSet, currencyPair) => {
+        deleteClient(clientSet, ws, currencyPair);
+      });
+      clearInterval(jobOHLC);
     });
 
     ws.on('message', evt => {
@@ -53,21 +85,10 @@ function setupServer(server) {
         case 'unsubscribe': {
           let currencyPairs = response.data.currency_pair;
           for (const currencyPair of currencyPairs) {
-            if (subscribing.delete(currencyPair)) {
-              const clients = subMap.get(currencyPair);
-              if (!!clients) {
-                clients.delete(ws);
-                if (clients.size == 0) { // No more client subscribing this currencyPair
-                  subMap.delete(currencyPair);
-                  let msg = {
-                    "event": "bts:unsubscribe",
-                    "data": {
-                      "channel": `live_trades_${currencyPair}`
-                    }
-                  };
-                  bitstampWS.send(JSON.stringify(msg));
-                }
-              }
+            subscribing.delete(currencyPair);
+            const clients = subMap.get(currencyPair);
+            if (!!clients) {
+              deleteClient(clients, ws, currencyPair);
             }
           }
           break;
@@ -87,16 +108,32 @@ function setupServer(server) {
   });
 
   serverWS.on('trade', (evt) => {
-    const data = JSON.parse(evt);
-    console.log(data);
-    const currencyPair = data.channel.split('_')[2];
+    const tradeDetail = JSON.parse(evt);
+    // console.log(tradeDetail);
+    const currencyPair = tradeDetail.channel.split('_')[2];
     const wsClients = subMap.get(currencyPair);
     if (!!wsClients) {
       wsClients.forEach(client => {
         client.send(evt);
       });
     }
+
+    addRedisTS(currencyPair, Number(tradeDetail.data.microtimestamp.slice(0, -3)), tradeDetail.data.price);
   });
+
+  function deleteClient(clientSet, ws, currencyPair) {
+    clientSet.delete(ws);
+    if (clientSet.size == 0) { // No more client subscribing this currencyPair
+      subMap.delete(currencyPair);
+      let msg = {
+        "event": "bts:unsubscribe",
+        "data": {
+          "channel": `live_trades_${currencyPair}`
+        }
+      };
+      bitstampWS.send(JSON.stringify(msg));
+    }
+  }
 
   return serverWS;
 }

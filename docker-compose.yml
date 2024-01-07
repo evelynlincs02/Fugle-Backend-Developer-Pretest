@@ -4,6 +4,7 @@ services:
     build: .
     volumes:
       - ./src:/workspace/src
+      - ./client.js:/workspace/client.js
     ports:
       - 3000:3000
     command: "npm start"
@@ -14,4 +15,4 @@ services:
       REDIS_PORT: 6379
 
   cache:
-    image: redis:7.2.3-alpine
+    image: redis/redis-stack-server:6.2.6-v10
